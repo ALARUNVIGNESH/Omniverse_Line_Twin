@@ -1,0 +1,103 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    metersPerUnit = 1
+    upAxis = "Y"
+)
+
+def Xform "World"
+{
+    def Xform "Line"
+    {
+        def Xform "ST010_BodyDrop" (
+            prepend references = @../assets/body.usda@
+            variants = {
+                string paint = "gloss_white"
+            }
+        )
+        {
+            custom float manufacturing:cycleTime = 52
+            custom string manufacturing:partNumber = "BDY-1001"
+            custom int manufacturing:sequence = 0
+            custom string manufacturing:station = "ST010_BodyDrop"
+            double3 xformOp:translate = (0, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+        }
+
+        def Xform "ST020_Weld" (
+            prepend references = @../assets/body.usda@
+            variants = {
+                string paint = "gloss_white"
+            }
+        )
+        {
+            custom float manufacturing:cycleTime = 61.5
+            custom string manufacturing:partNumber = "WLD-2004"
+            custom int manufacturing:sequence = 1
+            custom string manufacturing:station = "ST020_Weld"
+            double3 xformOp:translate = (8, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+        }
+
+        def Xform "ST030_PaintPrep" (
+            prepend references = @../assets/body.usda@
+            variants = {
+                string paint = "racing_blue"
+            }
+        )
+        {
+            custom float manufacturing:cycleTime = 47
+            custom string manufacturing:partNumber = "PNP-3011"
+            custom int manufacturing:sequence = 2
+            custom string manufacturing:station = "ST030_PaintPrep"
+            double3 xformOp:translate = (16, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+        }
+
+        def Xform "ST040_PaintBooth" (
+            prepend references = @../assets/body.usda@
+            variants = {
+                string paint = "racing_blue"
+            }
+        )
+        {
+            custom float manufacturing:cycleTime = 78
+            custom string manufacturing:partNumber = "PNB-3020"
+            custom int manufacturing:sequence = 3
+            custom string manufacturing:station = "ST040_PaintBooth"
+            double3 xformOp:translate = (24, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+        }
+
+        def Xform "ST050_Trim" (
+            prepend references = @../assets/body.usda@
+            variants = {
+                string paint = "matte_black"
+            }
+        )
+        {
+            custom float manufacturing:cycleTime = 55.5
+            custom string manufacturing:partNumber = "TRM-4008"
+            custom int manufacturing:sequence = 4
+            custom string manufacturing:station = "ST050_Trim"
+            double3 xformOp:translate = (32, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+        }
+
+        def Xform "ST060_FinalInspect" (
+            prepend references = @../assets/body.usda@
+            variants = {
+                string paint = "matte_black"
+            }
+        )
+        {
+            custom float manufacturing:cycleTime = 43
+            custom string manufacturing:partNumber = "FNI-5002"
+            custom int manufacturing:sequence = 5
+            custom string manufacturing:station = "ST060_FinalInspect"
+            double3 xformOp:translate = (40, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+        }
+    }
+}
+

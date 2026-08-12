@@ -18,8 +18,8 @@ any of them owning a private copy of the data.
 | `manufacturing:*` metadata on all six stations | working |
 | KPI module (OEE, bottleneck-gated line throughput) | working, unit tested |
 | Headless KPI report off the composed stage | working |
+| Live MQTT telemetry service (publisher + aggregator) | working, unit tested |
 | Omniverse Kit extension with in-viewport KPI panel | in progress |
-| Live telemetry service feeding the stage | in progress |
 | Unreal Engine 5 `UsdStageActor` client | planned |
 
 Everything marked *working* runs from a clean checkout with the commands below.
@@ -35,8 +35,14 @@ PYTHONPATH=src python -m line_twin.build_stage
 # read the composed stage back and report line KPIs
 PYTHONPATH=src python -m line_twin.report
 
-# unit tests for the KPI maths
+# unit tests for the KPI maths and the telemetry layer
 python -m pytest -q
+
+# live demo against a local broker (needs mosquitto running on :1883):
+#   terminal 1
+PYTHONPATH=src python -m line_twin.telemetry --publish
+#   terminal 2
+PYTHONPATH=src python -m line_twin.telemetry --subscribe
 ```
 
 `stage/line.usda` opens directly in USD Composer, usdview, or any USD-capable DCC.
@@ -88,6 +94,23 @@ the Kit panel and by CI.
   faster than its slowest station — averaging station throughputs is the usual way this
   metric gets reported wrong, and it flatters the line badly. The test suite pins this.
 
+## Live telemetry
+
+`src/line_twin/telemetry.py` replaces the synthetic samples in `report.py` with a
+real pub/sub transport (MQTT, e.g. a local Mosquitto broker for dev, or a plant's
+existing broker in production):
+
+- `TelemetryPublisher` stands in for the plant's sensors - one JSON sample per
+  station, published to `line/<station>/telemetry`.
+- `TelemetryAggregator` is the subscriber side the Kit extension and the Unreal
+  client each run - it holds the latest sample per station and turns them into the
+  same `StationSample` objects `kpi.line_summary` already consumes.
+
+Pointing this at a real plant is a publisher swap, not an architecture change: a
+bridge reads the plant's actual protocol (often OPC-UA on the factory floor) and
+republishes onto the same topics. `TelemetryAggregator`, the Kit panel and the KPI
+maths do not need to change.
+
 ## Layout
 
 ```
@@ -95,12 +118,16 @@ assets/body.usda            generated - body asset with paint variant set
 stage/line.usda             generated - six-station production line
 src/line_twin/build_stage.py  USD authoring and stage read-back
 src/line_twin/kpi.py          OEE and throughput maths
-src/line_twin/report.py       headless KPI report off the composed stage
+src/line_twin/report.py       headless KPI report off the composed stage (synthetic samples)
+src/line_twin/telemetry.py    MQTT publisher + aggregator - the live equivalent of report.py
 tests/test_kpi.py             unit tests
+tests/test_telemetry.py       unit tests
 ```
 
 ## Next
 
-- Kit extension: variant switcher plus a live KPI panel reading the same stage.
-- Telemetry service streaming station samples in place of `synthesize_samples`.
-- Unreal client consuming `stage/line.usda` through `UsdStageActor`.
+- Kit extension: variant switcher plus a live KPI panel reading `TelemetryAggregator`.
+- A real CAD-derived body mesh in place of the stand-in cube, via `usd-convert-cad`.
+- `instanceable = true` on the referenced body asset, with a measured before/after.
+- Unreal client consuming `stage/line.usda` through `UsdStageActor`, subscribed to
+  the same MQTT topics as the Kit panel.

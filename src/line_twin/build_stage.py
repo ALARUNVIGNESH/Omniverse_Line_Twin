@@ -67,6 +67,9 @@ def build_body_asset() -> Path:
             )
     vset.SetVariantSelection("gloss_white")
 
+    from line_twin.materials import add_paint_materials
+    add_paint_materials(stage)
+
     stage.GetRootLayer().Save()
     return BODY_PATH
 
@@ -93,6 +96,16 @@ def build_line_stage() -> Path:
         prim = station.GetPrim()
         prim.GetReferences().AddReference(rel_body)
         prim.GetVariantSet("paint").SetVariantSelection(spec["paint"])
+        # Six stations reference the same body asset, so mark each reference
+        # instanceable: USD shares one composed copy of the geometry across
+        # every station whose full composed opinion (reference + variant
+        # selection) matches, instead of expanding six independent copies.
+        # Stations don't all collapse to a single shared copy, because they
+        # don't all carry the same paint variant - USD groups instances by
+        # their complete composed state, so this yields one shared prototype
+        # per distinct paint variant in use (3 here), not one for the whole
+        # line. See instancing_report.py for a measured before/after.
+        prim.SetInstanceable(True)
 
         # Custom manufacturing metadata. Namespaced so a Kit extension (or any
         # USD client) can discover every station by attribute prefix alone.
@@ -109,7 +122,28 @@ def build_line_stage() -> Path:
             "manufacturing:sequence", Sdf.ValueTypeNames.Int, custom=True
         ).Set(index)
 
+    from line_twin.physics_setup import add_inspection_gate, add_physics_scene
+    add_physics_scene(stage)
+    add_inspection_gate(stage)
+
+    from line_twin.routing import author_routing
+    author_routing(stage)
+
+    from line_twin.bom import author_bom
+    author_bom(stage)
+
+    from line_twin.lighting import add_camera, add_lighting
+    add_lighting(stage)
+    add_camera(stage)
+
     stage.GetRootLayer().Save()
+
+    # Fail the build loudly if routing is ever broken, rather than shipping
+    # a stage with a silently wrong line - this is exactly what the
+    # validator exists for.
+    from line_twin.routing import read_routing, validate_routing
+    validate_routing(read_routing(LINE_PATH))
+
     return LINE_PATH
 
 

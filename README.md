@@ -19,8 +19,15 @@ any of them owning a private copy of the data.
 | KPI module (OEE, bottleneck-gated line throughput) | working, unit tested |
 | Headless KPI report off the composed stage | working |
 | Live MQTT telemetry service (publisher + aggregator) | working, unit tested |
-| Omniverse Kit extension with in-viewport KPI panel | in progress |
-| Unreal Engine 5 `UsdStageActor` client | planned |
+| Omniverse Kit extension with in-viewport KPI panel | logic unit tested; in-Kit UI verification pending |
+| USD native instancing on the referenced body asset | working, unit tested, measured before/after |
+| CAD-derived station integration | working, unit tested (stub asset - swap in real `usd-convert-cad` output) |
+| PBR materials (UsdShade/UsdPreviewSurface) per paint variant | working, unit tested end-to-end |
+| Physics scene + kinematic inspection-gate joint | schema authored and unit tested; runtime simulation unverified (needs Kit/Unreal PhysX) |
+| Bill of materials per station | working, unit tested |
+| Routing graph with a validator that catches cycles/gaps | working, unit tested against deliberately broken input |
+| Lighting (dome + key/fill) and a framed camera | schema authored and unit tested; RTX-rendered result unverified |
+| Unreal Engine 5 `UsdStageActor` client | written, awaiting in-Unreal verification |
 
 Everything marked *working* runs from a clean checkout with the commands below.
 
@@ -94,6 +101,83 @@ the Kit panel and by CI.
   faster than its slowest station — averaging station throughputs is the usual way this
   metric gets reported wrong, and it flatters the line badly. The test suite pins this.
 
+## Materials
+
+The original body asset only set `displayColor` per paint variant - a flat
+viewport preview color, not an actual shaded material. `src/line_twin/materials.py`
+replaces that with real `UsdShade`/`UsdPreviewSurface` materials: diffuse
+color, roughness, metallic, and clearcoat, tuned differently per finish (gloss
+white and racing blue lean into a strong clearcoat like real automotive paint;
+matte black has none). Materials are authored once under `/Body/Materials`
+and bound inside each variant's own edit context, so selecting a paint
+variant switches the bound *material*, not just a display color - verified
+end-to-end through the full station reference chain, not just on the
+isolated body asset. UsdPreviewSurface is render-delegate-agnostic, so the
+same binding resolves consistently in Kit, in the Unreal client, and in
+usdview with no per-engine re-authoring.
+
+## Bill of materials and routing
+
+Before this, each station only carried the one part it *produces*
+(`manufacturing:partNumber`) - nothing about what goes into it, and its
+position in the line was implicit in a Python list index rather than an
+authored graph. `src/line_twin/bom.py` and `src/line_twin/routing.py` close
+both:
+
+- **BOM** - sub-components and quantities per station, authored as parallel
+  array attributes on the station prim (not child prims - stations are
+  instanceable, and USD doesn't allow authoring new prims under an
+  instanceable prim's subtree, the same constraint the inspection gate hit).
+- **Routing** - explicit `predecessor`/`successor` attributes per station,
+  plus a validator that walks the graph itself rather than trusting sequence
+  numbers. `build_line_stage()` calls it on every build and raises loudly if
+  the routing is ever broken - the test suite proves this by feeding it
+  deliberately broken graphs (a cycle, a gap, two entry points, a dangling
+  reference) and confirming each one is rejected, not just that the happy
+  path passes.
+
+## Lighting
+
+`src/line_twin/lighting.py` adds a `UsdLux` dome light plus a key/fill rect
+light pair, and a camera framed on the whole line - the stage had zero
+lights before this, which would render flat and gray regardless of how
+correct the geometry and materials underneath it are. Schema-verified
+(intensities, relative brightness, camera focal length); the actual
+RTX-rendered result is unverified, same caveat as the physics simulation.
+
+## Physics and kinematics
+
+`src/line_twin/physics_setup.py` authors a `PhysicsScene` and a small,
+honest kinematic mechanism: a two-link inspection gate at the final
+inspection station (a kinematic base + a dynamic arm connected by a
+`UsdPhysics.RevoluteJoint`, swinging from rest to a scanning position). This
+is real `UsdPhysics` schema, verified with tests that check joint type, axis,
+limits, and body relationships - the same schema a PhysX-enabled runtime
+would consume to actually simulate it. **It has not been runtime-simulated**
+- that needs Kit's or Unreal's PhysX, neither of which is available in the
+environment this was built in. The gate lives as a sibling of
+`ST060_FinalInspect` rather than a child of it, because that station is
+instanceable and USD does not allow authoring new prims under an
+instanceable prim's own subtree.
+
+## Kit viewport extension
+
+`exts/line_twin.viewport/` is a Kit extension: a paint-variant dropdown that
+applies to every station at once, plus a live KPI panel reading
+`TelemetryAggregator`. The stage-manipulation logic (`src/line_twin/panel_controller.py`
+- finding station prims, reading available paint variants, applying a variant)
+takes a `Usd.Stage` as an argument rather than owning one, so it's unit tested
+against a plain `Usd.Stage.Open()` handle exactly like the rest of the suite.
+The extension itself passes it `omni.usd.get_context().get_stage()` - the
+actual stage open in the viewport - so `extension.py` does nothing but wire
+that tested logic to widgets. It is the one file in this repo that can't be
+exercised outside Kit, and is kept as thin as possible for that reason.
+
+To load it: add this repo's `exts` folder to Kit's extension search paths,
+enable **Line Twin Viewport** in the Extension Manager, open `stage/line.usda`
+in the viewport, then (with a local broker running) `python -m line_twin.telemetry
+--publish` in a separate terminal to see the panel update live.
+
 ## Live telemetry
 
 `src/line_twin/telemetry.py` replaces the synthetic samples in `report.py` with a
@@ -111,6 +195,62 @@ bridge reads the plant's actual protocol (often OPC-UA on the factory floor) and
 republishes onto the same topics. `TelemetryAggregator`, the Kit panel and the KPI
 maths do not need to change.
 
+## USD instancing
+
+All six stations reference the same body asset, so each one is marked
+`instanceable = true` (in `build_stage.py`). USD shares one composed copy of
+the geometry across every station whose full composed opinion - the
+reference plus the paint variant selection - matches, instead of expanding
+six fully independent copies. Because the three paint variants aren't all
+the same, this yields one shared prototype per distinct variant in use (3
+here, from 6 stations), not one for the whole line.
+
+`python -m line_twin.instancing_report` builds the line both ways and prints
+the real difference:
+
+```
+BEFORE  instanceable = false        AFTER   instanceable = true
+  prims_traversed_default: 14         prims_traversed_default: 8
+  prototype_count: 0                  prototype_count: 3
+```
+
+## CAD integration
+
+`src/line_twin/cad_integration.py` adds a station whose geometry comes from
+an externally converted CAD file rather than the synthetic body asset -
+`add_cad_station()` references it in and tags it with the same
+`manufacturing:*` metadata every other station carries, so it shows up in
+`read_stations()`, the KPI panel, and the Unreal client with no special
+casing anywhere downstream.
+
+Running the actual conversion needs NVIDIA's `usd-convert-cad` (or any
+CAD-to-USD tool) on a real STEP/IGES file - not something this repo runs
+standalone. `build_stub_cad_asset()` exists only so the integration path
+itself (add, tag, read back) is unit tested before a real converted asset
+exists:
+
+```python
+from line_twin.cad_integration import add_cad_station
+
+add_cad_station(
+    cad_asset_path="assets/my_converted_part.usda",  # usd-convert-cad output
+    name="ST070_WeldFixture",
+    part_number="FIX-9001",
+    cycle_time=35.0,
+    sequence=6,
+    x_position=48.0,
+)
+```
+
+## Unreal client
+
+`unreal/line_twin_stage_client.py` runs inside Unreal Editor's Python
+console (not runnable outside UE5 - see the file's own header for setup).
+It points a `UsdStageActor` at `stage/line.usda` and drives an on-screen KPI
+readout from the same `TelemetryAggregator` the Kit extension uses, so Kit
+and Unreal are both watching the same live feed rather than two separate
+copies of the truth.
+
 ## Layout
 
 ```
@@ -120,14 +260,33 @@ src/line_twin/build_stage.py  USD authoring and stage read-back
 src/line_twin/kpi.py          OEE and throughput maths
 src/line_twin/report.py       headless KPI report off the composed stage (synthetic samples)
 src/line_twin/telemetry.py    MQTT publisher + aggregator - the live equivalent of report.py
+src/line_twin/panel_controller.py  stage logic behind the Kit extension - unit tested
+src/line_twin/instancing_report.py  measured before/after for USD instancing
+src/line_twin/cad_integration.py  reference a CAD-derived asset in as a station
+src/line_twin/materials.py    real UsdShade/UsdPreviewSurface materials per paint variant
+src/line_twin/physics_setup.py  physics scene + kinematic inspection-gate joint (schema only)
+src/line_twin/bom.py          bill of materials per station
+src/line_twin/routing.py      routing graph + validator (catches cycles/gaps)
+src/line_twin/lighting.py     dome/key/fill lighting + framed camera
+unreal/line_twin_stage_client.py  UE5 client - needs Unreal itself to run
+exts/line_twin.viewport/      Kit extension - thin omni.ui/omni.ext wrapper over panel_controller.py
 tests/test_kpi.py             unit tests
 tests/test_telemetry.py       unit tests
+tests/test_panel_controller.py  unit tests, incl. the instancing/prototype assertion
+tests/test_cad_integration.py  unit tests, isolated from the tracked stage file
+tests/test_materials.py       unit tests, incl. end-to-end resolution through station composition
+tests/test_physics_setup.py   unit tests for the physics/joint schema
+tests/test_bom.py             unit tests
+tests/test_routing.py         unit tests, incl. deliberately broken routing graphs
+tests/test_lighting.py        unit tests
 ```
 
 ## Next
 
-- Kit extension: variant switcher plus a live KPI panel reading `TelemetryAggregator`.
-- A real CAD-derived body mesh in place of the stand-in cube, via `usd-convert-cad`.
-- `instanceable = true` on the referenced body asset, with a measured before/after.
-- Unreal client consuming `stage/line.usda` through `UsdStageActor`, subscribed to
-  the same MQTT topics as the Kit panel.
+- Verify the Kit extension inside Kit itself and capture a demo recording.
+- Run a real STEP file through `usd-convert-cad` and swap it in for the stub
+  in `cad_integration.build_stub_cad_asset`.
+- Verify the Unreal client inside UE5 itself and capture a demo recording.
+- Verify the inspection-gate joint under an actual PhysX simulation step,
+  and the lighting under an actual RTX render, in Kit or Unreal.
+- README architecture diagram, resume link, and interview talking points.

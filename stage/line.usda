@@ -10,14 +10,20 @@ def Xform "World"
     def Xform "Line"
     {
         def Xform "ST010_BodyDrop" (
+            instanceable = true
             prepend references = @../assets/body.usda@
             variants = {
                 string paint = "gloss_white"
             }
         )
         {
+            custom string[] manufacturing:bom:descriptions = ["Chassis frame rail", "Cross-member bracket", "Floor pan"]
+            custom string[] manufacturing:bom:partNumbers = ["FRM-1001", "XMB-1002", "FLR-1003"]
+            custom int[] manufacturing:bom:quantities = [2, 4, 1]
             custom float manufacturing:cycleTime = 52
             custom string manufacturing:partNumber = "BDY-1001"
+            custom string manufacturing:routing:predecessor = ""
+            custom string manufacturing:routing:successor = "ST020_Weld"
             custom int manufacturing:sequence = 0
             custom string manufacturing:station = "ST010_BodyDrop"
             double3 xformOp:translate = (0, 0, 0)
@@ -25,14 +31,20 @@ def Xform "World"
         }
 
         def Xform "ST020_Weld" (
+            instanceable = true
             prepend references = @../assets/body.usda@
             variants = {
                 string paint = "gloss_white"
             }
         )
         {
+            custom string[] manufacturing:bom:descriptions = ["Weld nut, M8", "Structural gusset"]
+            custom string[] manufacturing:bom:partNumbers = ["WLD-2001", "WLD-2002"]
+            custom int[] manufacturing:bom:quantities = [24, 6]
             custom float manufacturing:cycleTime = 61.5
             custom string manufacturing:partNumber = "WLD-2004"
+            custom string manufacturing:routing:predecessor = "ST010_BodyDrop"
+            custom string manufacturing:routing:successor = "ST030_PaintPrep"
             custom int manufacturing:sequence = 1
             custom string manufacturing:station = "ST020_Weld"
             double3 xformOp:translate = (8, 0, 0)
@@ -40,14 +52,20 @@ def Xform "World"
         }
 
         def Xform "ST030_PaintPrep" (
+            instanceable = true
             prepend references = @../assets/body.usda@
             variants = {
                 string paint = "racing_blue"
             }
         )
         {
+            custom string[] manufacturing:bom:descriptions = ["Surface cleaner, per unit", "Masking kit"]
+            custom string[] manufacturing:bom:partNumbers = ["PNP-3001", "PNP-3002"]
+            custom int[] manufacturing:bom:quantities = [1, 1]
             custom float manufacturing:cycleTime = 47
             custom string manufacturing:partNumber = "PNP-3011"
+            custom string manufacturing:routing:predecessor = "ST020_Weld"
+            custom string manufacturing:routing:successor = "ST040_PaintBooth"
             custom int manufacturing:sequence = 2
             custom string manufacturing:station = "ST030_PaintPrep"
             double3 xformOp:translate = (16, 0, 0)
@@ -55,14 +73,20 @@ def Xform "World"
         }
 
         def Xform "ST040_PaintBooth" (
+            instanceable = true
             prepend references = @../assets/body.usda@
             variants = {
                 string paint = "racing_blue"
             }
         )
         {
+            custom string[] manufacturing:bom:descriptions = ["Base coat, racing blue", "Clear coat"]
+            custom string[] manufacturing:bom:partNumbers = ["PNB-4001", "PNB-4002"]
+            custom int[] manufacturing:bom:quantities = [1, 1]
             custom float manufacturing:cycleTime = 78
             custom string manufacturing:partNumber = "PNB-3020"
+            custom string manufacturing:routing:predecessor = "ST030_PaintPrep"
+            custom string manufacturing:routing:successor = "ST050_Trim"
             custom int manufacturing:sequence = 3
             custom string manufacturing:station = "ST040_PaintBooth"
             double3 xformOp:translate = (24, 0, 0)
@@ -70,14 +94,20 @@ def Xform "World"
         }
 
         def Xform "ST050_Trim" (
+            instanceable = true
             prepend references = @../assets/body.usda@
             variants = {
                 string paint = "matte_black"
             }
         )
         {
+            custom string[] manufacturing:bom:descriptions = ["Door seal kit", "Interior trim panel", "Badge, rear"]
+            custom string[] manufacturing:bom:partNumbers = ["TRM-5001", "TRM-5002", "TRM-5003"]
+            custom int[] manufacturing:bom:quantities = [4, 6, 1]
             custom float manufacturing:cycleTime = 55.5
             custom string manufacturing:partNumber = "TRM-4008"
+            custom string manufacturing:routing:predecessor = "ST040_PaintBooth"
+            custom string manufacturing:routing:successor = "ST060_FinalInspect"
             custom int manufacturing:sequence = 4
             custom string manufacturing:station = "ST050_Trim"
             double3 xformOp:translate = (32, 0, 0)
@@ -85,19 +115,120 @@ def Xform "World"
         }
 
         def Xform "ST060_FinalInspect" (
+            instanceable = true
             prepend references = @../assets/body.usda@
             variants = {
                 string paint = "matte_black"
             }
         )
         {
+            custom string[] manufacturing:bom:descriptions = ["Inspection checklist tag"]
+            custom string[] manufacturing:bom:partNumbers = ["FNI-6001"]
+            custom int[] manufacturing:bom:quantities = [1]
             custom float manufacturing:cycleTime = 43
             custom string manufacturing:partNumber = "FNI-5002"
+            custom string manufacturing:routing:predecessor = "ST050_Trim"
+            custom string manufacturing:routing:successor = ""
             custom int manufacturing:sequence = 5
             custom string manufacturing:station = "ST060_FinalInspect"
             double3 xformOp:translate = (40, 0, 0)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
+
+        def Xform "ST060_InspectionGate"
+        {
+            double3 xformOp:translate = (40, 0, 1)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+
+            def Xform "Base" (
+                prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+            )
+            {
+                bool physics:kinematicEnabled = 1
+
+                def Cube "Geo" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI"]
+                )
+                {
+                    double size = 0.2
+                }
+            }
+
+            def Xform "Arm" (
+                prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+            )
+            {
+                float physics:mass = 4
+                double3 xformOp:translate = (0, 0, 0.5)
+                uniform token[] xformOpOrder = ["xformOp:translate"]
+
+                def Cube "Geo" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI"]
+                )
+                {
+                    double size = 0.1
+                    float3 xformOp:scale = (1, 1, 6)
+                    uniform token[] xformOpOrder = ["xformOp:scale"]
+                }
+            }
+
+            def PhysicsRevoluteJoint "HingeJoint"
+            {
+                uniform token physics:axis = "X"
+                rel physics:body0 = </World/Line/ST060_InspectionGate/Base>
+                rel physics:body1 = </World/Line/ST060_InspectionGate/Arm>
+                float physics:lowerLimit = -10
+                float physics:upperLimit = 80
+            }
+        }
     }
+
+    def "Lights"
+    {
+        def DomeLight "Dome"
+        {
+            color3f inputs:color = (0.9, 0.92, 1)
+            float inputs:intensity = 400
+        }
+
+        def RectLight "KeyLight"
+        {
+            color3f inputs:color = (1, 0.96, 0.9)
+            float inputs:height = 4
+            float inputs:intensity = 6000
+            float inputs:width = 6
+            float xformOp:rotateX = -45
+            double3 xformOp:translate = (20, 6, 6)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateX"]
+        }
+
+        def RectLight "FillLight"
+        {
+            color3f inputs:color = (0.85, 0.9, 1)
+            float inputs:height = 4
+            float inputs:intensity = 2000
+            float inputs:width = 6
+            float xformOp:rotateX = -135
+            double3 xformOp:translate = (20, 6, -6)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateX"]
+        }
+    }
+
+    def "Cameras"
+    {
+        def Camera "LineOverview"
+        {
+            float focalLength = 24
+            float xformOp:rotateX = -35
+            double3 xformOp:translate = (20, 20, 36)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateX"]
+        }
+    }
+}
+
+def PhysicsScene "PhysicsScene"
+{
+    vector3f physics:gravityDirection = (0, -1, 0)
+    float physics:gravityMagnitude = 9.81
 }
 

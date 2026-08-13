@@ -1,0 +1,13 @@
+[package]
+version = "0.1.0"
+title = "Line Twin Viewport"
+description = "Paint-variant switcher and live MQTT KPI panel for the production-line digital twin."
+category = "Simulation"
+keywords = ["digital twin", "usd", "kpi", "manufacturing", "mqtt"]
+
+[dependencies]
+"omni.kit.uiapp" = {}
+"omni.usd" = {}
+
+[[python.module]]
+name = "line_twin_viewport"

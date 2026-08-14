@@ -19,17 +19,36 @@ any of them owning a private copy of the data.
 | KPI module (OEE, bottleneck-gated line throughput) | working, unit tested |
 | Headless KPI report off the composed stage | working |
 | Live MQTT telemetry service (publisher + aggregator) | working, unit tested |
-| Omniverse Kit extension with in-viewport KPI panel | logic unit tested; in-Kit UI verification pending |
+| Omniverse Kit extension with in-viewport KPI panel | working — verified live in Kit (panel, variant dropdown, MQTT KPIs) |
 | USD native instancing on the referenced body asset | working, unit tested, measured before/after |
 | CAD-derived station integration | working, unit tested (stub asset - swap in real `usd-convert-cad` output) |
-| PBR materials (UsdShade/UsdPreviewSurface) per paint variant | working, unit tested end-to-end |
+| PBR materials (UsdShade/UsdPreviewSurface) per paint variant | working — unit tested, and verified rendering in Unreal |
 | Physics scene + kinematic inspection-gate joint | schema authored and unit tested; runtime simulation unverified (needs Kit/Unreal PhysX) |
 | Bill of materials per station | working, unit tested |
 | Routing graph with a validator that catches cycles/gaps | working, unit tested against deliberately broken input |
 | Lighting (dome + key/fill) and a framed camera | schema authored and unit tested; RTX-rendered result unverified |
-| Unreal Engine 5 `UsdStageActor` client | written, awaiting in-Unreal verification |
+| Unreal Engine 5 `UsdStageActor` client | working — stage renders in UE5 with correct per-station materials |
 
 Everything marked *working* runs from a clean checkout with the commands below.
+
+## Verified end to end
+
+Run in Omniverse Kit (Kit Base Editor built from `kit-app-template`) and in Unreal
+Engine 5, not just in tests:
+
+- The Kit extension loads, reads the six stations off the composed stage, and its
+  KPI panel updates live from MQTT — stations heard, per-station OEE and
+  throughput, and the bottleneck correctly identified as the slowest station.
+- Switching the paint variant from the panel re-binds the material on every
+  station (`set_paint_variant` returns 6; each station's `ComputeBoundMaterial`
+  follows the new variant).
+- Unreal renders the same `stage/line.usda` through a `UsdStageActor` with no
+  import step, showing the three paint variants correctly across the six stations.
+
+Two things are deliberately not claimed. The physics gate is authored and
+schema-tested but has not been stepped under PhysX, and the lighting has not been
+seen under an RTX render — both need hardware this was not built on. The CAD
+integration path is tested against a generated stub rather than a real STEP file.
 
 ## Quick start
 
@@ -283,10 +302,11 @@ tests/test_lighting.py        unit tests
 
 ## Next
 
-- Verify the Kit extension inside Kit itself and capture a demo recording.
 - Run a real STEP file through `usd-convert-cad` and swap it in for the stub
   in `cad_integration.build_stub_cad_asset`.
-- Verify the Unreal client inside UE5 itself and capture a demo recording.
-- Verify the inspection-gate joint under an actual PhysX simulation step,
-  and the lighting under an actual RTX render, in Kit or Unreal.
-- README architecture diagram, resume link, and interview talking points.
+- Step the inspection-gate joint under PhysX, and render the lighting under RTX,
+  on RT-capable hardware.
+- Subscribe the Unreal client to the same MQTT topics as the Kit panel
+  (`unreal/line_twin_stage_client.py`, not yet run in UE5).
+- Sync the Kit panel's paint dropdown to the stage's current variant selection on
+  build — it currently always starts at the first option.

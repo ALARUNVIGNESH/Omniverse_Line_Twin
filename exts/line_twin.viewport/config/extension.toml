@@ -9,5 +9,9 @@ keywords = ["digital twin", "usd", "kpi", "manufacturing", "mqtt"]
 "omni.kit.uiapp" = {}
 "omni.usd" = {}
 
+[python.pipapi]
+requirements = ["paho-mqtt"]
+use_online_index = true
+
 [[python.module]]
 name = "line_twin_viewport"
